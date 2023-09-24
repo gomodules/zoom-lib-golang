@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/zoom-lib-golang/zoom-lib-golang"
+	"gomodules.xyz/zoom-lib-golang"
 )
 
 func main() {

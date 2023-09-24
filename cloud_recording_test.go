@@ -1,3 +1,4 @@
+//go:build integration || foo
 // +build integration foo
 
 package zoom
