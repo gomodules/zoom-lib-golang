@@ -2,15 +2,19 @@ package zoom
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/google/go-querystring/query"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 const (
@@ -34,15 +38,29 @@ var (
 
 // Client is responsible for making API requests
 type Client struct {
-	Key       string
-	Secret    string
-	Transport http.RoundTripper
-	Timeout   time.Duration // set to value > 0 to enable a request timeout
-	endpoint  string
+	cfg      clientcredentials.Config
+	Timeout  time.Duration // set to value > 0 to enable a request timeout
+	endpoint string
 }
 
 // NewClient returns a new API client
-func NewClient(apiKey string, apiSecret string) *Client {
+func NewClient() *Client {
+	// ref:
+	// - https://developers.zoom.us/docs/internal-apps/#use-account-credentials-to-get-an-access-token
+	// - https://developers.zoom.us/docs/internal-apps/s2s-oauth/#use-account-credentials-to-get-an-access-token
+	params := url.Values{}
+	params.Add("grant_type", "account_credentials")
+	params.Add("account_id", os.Getenv("ZOOM_ACCOUNT_ID"))
+
+	cfg := clientcredentials.Config{
+		ClientID:       os.Getenv("ZOOM_CLIENT_ID"),
+		ClientSecret:   os.Getenv("ZOOM_CLIENT_SECRET"),
+		TokenURL:       "https://zoom.us/oauth/token",
+		Scopes:         nil,
+		EndpointParams: params,
+		AuthStyle:      oauth2.AuthStyleInHeader,
+	}
+
 	var uri = url.URL{
 		Scheme: "https",
 		Host:   apiURI,
@@ -50,8 +68,7 @@ func NewClient(apiKey string, apiSecret string) *Client {
 	}
 
 	return &Client{
-		Key:      apiKey,
-		Secret:   apiSecret,
+		cfg:      cfg,
 		endpoint: uri.String(),
 	}
 }
@@ -70,7 +87,7 @@ type requestV2Opts struct {
 func initializeDefault(c *Client) *Client {
 	if c == nil {
 		if defaultClient == nil {
-			defaultClient = NewClient(APIKey, APISecret)
+			defaultClient = NewClient()
 		}
 
 		return defaultClient
@@ -81,7 +98,7 @@ func initializeDefault(c *Client) *Client {
 
 func (c *Client) executeRequest(opts requestV2Opts) (*http.Response, error) {
 	client := c.httpClient()
-	req, err := c.addRequestAuth(c.httpRequest(opts))
+	req, err := c.httpRequest(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -122,11 +139,10 @@ func (c *Client) httpRequest(opts requestV2Opts) (*http.Request, error) {
 }
 
 func (c *Client) httpClient() *http.Client {
-	client := &http.Client{Transport: c.Transport}
+	client := c.cfg.Client(context.TODO())
 	if c.Timeout > 0 {
 		client.Timeout = c.Timeout
 	}
-
 	return client
 }
 
@@ -151,7 +167,7 @@ func (c *Client) requestV2(opts requestV2Opts) error {
 func (c *Client) requestV2WithBody(opts requestV2Opts, resp *http.Response) error {
 	// read HTTP response
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}

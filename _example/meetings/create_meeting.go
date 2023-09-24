@@ -1,25 +1,19 @@
 package main
 
 import (
-	"log"
-	"os"
-
 	"gomodules.xyz/zoom-lib-golang"
+	"log"
 )
 
 func main() {
-	var (
-		apiKey    = os.Getenv("ZOOM_API_KEY")
-		apiSecret = os.Getenv("ZOOM_API_SECRET")
-		userID    = os.Getenv("USER_ID")
-	)
-
-	zoom.APIKey = apiKey
-	zoom.APISecret = apiSecret
+	user, err := zoom.GetUser(zoom.GetUserOpts{EmailOrID: "tamal@appscode.com"})
+	if err != nil {
+		log.Fatalf("failed to get zoom user: %v", err)
+	}
 
 	// Set HostID
 	createMeetingOpt := zoom.CreateMeetingOptions{
-		HostID: userID,
+		HostID: user.ID,
 	}
 
 	meeting, err := zoom.CreateMeeting(createMeetingOpt)
